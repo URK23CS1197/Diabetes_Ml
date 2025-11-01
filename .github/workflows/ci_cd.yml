@@ -35,8 +35,16 @@ jobs:
         with:
           node-version: '18'
       
-      - name: Install frontend dependencies and run tests
+      - name: Install frontend dependencies
         run: |
           cd frontend
           npm install
-          npm test
+      
+      - name: Fix react-scripts permissions
+        run: chmod +x node_modules/.bin/react-scripts
+        working-directory: frontend
+
+      - name: Run frontend tests
+        run: npm test
+        working-directory: frontend
+        shell: bash
