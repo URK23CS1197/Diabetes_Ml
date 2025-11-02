@@ -1,50 +1,107 @@
-name: CI
+name: CI/CD for Diabetes ML Web App (React + Vite + Flask)
 
 on:
   push:
-    branches: [main]
+    branches: [main]  # Change to [master] if your branch is master
 
 jobs:
-  backend-tests:
+  backend_ci:
+    name: Backend Tests & Validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
-      
+          python-version: '3.10'
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
       - name: Install backend dependencies
         run: |
           cd backend
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
-      
+
       - name: Run backend tests
         run: |
           cd backend
-          pytest
+          pytest test_backend.py
 
-  frontend-tests:
+      - name: Run Flask app locally
+        run: |
+          cd backend
+          python main.py &  # Runs in background
+          sleep 10  # Wait for app to start
+
+      - name: Test Flask app
+        run: |
+          set -e
+          if ! curl -f http://localhost:5000/predict -X POST -H "Content-Type: application/json" -d '{"Pregnancies": 6, "Glucose": 148, "BloodPressure": 72, "SkinThickness": 35, "Insulin": 0, "BMI": 33.6, "DiabetesPedigreeFunction": 0.627, "Age": 50}'; then
+            echo "App logs:"
+            pkill -f main.py  # Stop the app
+            exit 1
+          fi
+          pkill -f main.py  # Stop the app
+
+  frontend_ci:
+    name: Frontend Tests & Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
-      
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Install frontend dependencies
         run: |
           cd frontend
-          npm install
-      
-      - name: Fix react-scripts permissions
-        run: chmod +x node_modules/.bin/react-scripts
-        working-directory: frontend
+          npm ci
 
       - name: Run frontend tests
-        run: npm test
-        working-directory: frontend
-        shell: bash
+        run: |
+          cd frontend
+          npm test  # Uses Jest based on App.test.js and jest.config.js
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build  # Outputs to /frontend/dist
+
+  deploy_backend:
+    name: Deploy Backend to Render
+    needs: backend_ci
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+    steps:
+      - name: Trigger Render Deploy
+        uses: johnbeynon/render-deploy-action@v0.0.8
+        with:
+          service-id: ${{ secrets.RENDER_BACKEND_SERVICE_ID }}
+          api-key: ${{ secrets.RENDER_API_KEY }}
+
+  deploy_frontend:
+    name: Deploy Frontend to Render
+    needs: frontend_ci
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+    steps:
+      - name: Trigger Render Deploy
+        uses: johnbeynon/render-deploy-action@v0.0.8
+        with:
+          service-id: ${{ secrets.RENDER_FRONTEND_SERVICE_ID }}
+          api-key: ${{ secrets.RENDER_API_KEY }}
