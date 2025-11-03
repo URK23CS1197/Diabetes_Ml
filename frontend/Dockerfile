@@ -7,7 +7,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-
+#docekr_file
 # Fix executable permissions for react-scripts and other binaries
 RUN chmod -R +x ./node_modules/.bin
 
