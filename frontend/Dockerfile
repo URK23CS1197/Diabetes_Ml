@@ -7,16 +7,17 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+
+# Fix executable permissions for react-scripts and other binaries
+RUN chmod -R +x ./node_modules/.bin
+
 RUN npm run build
 
 # Production stage
 FROM nginx:stable-alpine
 
-# Copy built static files from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Expose port 80
 EXPOSE 80
 
-# Start nginx
 CMD ["nginx", "-g", "daemon off;"]
