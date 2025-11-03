@@ -1,5 +1,4 @@
 name: CI/CD for Diabetes ML Web App (React + Vite + Flask)
-
 on:
   push:
     branches: [main]  # Change to [master] if your branch is master
@@ -11,36 +10,30 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-
       - name: Cache Python dependencies
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
           restore-keys: ${{ runner.os }}-pip-
-
       - name: Install backend dependencies
         run: |
           cd backend
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
       - name: Run backend tests
         run: |
           cd backend
           pytest test_backend.py
-
       - name: Run Flask app locally
         run: |
           cd backend
           python main.py &  # Runs in background
           sleep 10  # Wait for app to start
-
       - name: Test Flask app
         run: |
           set -e
@@ -57,36 +50,38 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-
       - name: Install frontend dependencies
         run: |
           cd frontend
           npm ci
-
       - name: Run frontend tests
         run: |
           cd frontend
           npm test  # Uses Jest based on App.test.js and jest.config.js
-
       - name: Build frontend
         run: |
           cd frontend
           npm run build  # Outputs to /frontend/dist
 
   deploy_backend:
-    name: Deploy Backend to Render
+    name: Build Docker Image & Deploy Backend to Render
     needs: backend_ci
     runs-on: ubuntu-latest
     permissions:
       deployments: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Build backend Docker image
+        run: |
+          cd backend
+          docker build -t backend-temp-image .
       - name: Trigger Render Deploy
         uses: johnbeynon/render-deploy-action@v0.0.8
         with:
@@ -94,14 +89,16 @@ jobs:
           api-key: ${{ secrets.RENDER_API_KEY }}
 
   deploy_frontend:
-    name: Deploy Frontend to Render
+    name: Build Docker Image & Deploy Frontend to Render
     needs: frontend_ci
     runs-on: ubuntu-latest
     permissions:
       deployments: write
     steps:
-      - name: Trigger Render Deploy
-        uses: johnbeynon/render-deploy-action@v0.0.8
-        with:
-          service-id: ${{ secrets.RENDER_FRONTEND_SERVICE_ID }}
-          api-key: ${{ secrets.RENDER_API_KEY }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Build frontend Docker image
+        run: |
+          cd frontend
+          docker build -t frontend-temp-image .
+      - name: Trigger
