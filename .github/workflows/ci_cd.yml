@@ -89,16 +89,20 @@ jobs:
           api-key: ${{ secrets.RENDER_API_KEY }}
 
   deploy_frontend:
-    name: Build Docker Image & Deploy Frontend to Render
-    needs: frontend_ci
-    runs-on: ubuntu-latest
-    permissions:
-      deployments: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Build frontend Docker image
-        run: |
-          cd frontend
-          docker build -t frontend-temp-image .
-      - name: Trigger
+  name: Build Docker Image & Deploy Frontend to Render
+  needs: frontend_ci
+  runs-on: ubuntu-latest
+  permissions:
+    deployments: write
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Build frontend Docker image
+      run: |
+        cd frontend
+        docker build -t frontend-temp-image .
+    - name: Trigger Render Deploy
+      uses: johnbeynon/render-deploy-action@v0.0.8
+      with:
+        service-id: ${{ secrets.RENDER_FRONTEND_SERVICE_ID }}
+        api-key: ${{ secrets.RENDER_API_KEY }}
