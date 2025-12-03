@@ -26,7 +26,6 @@ A compact, end-to-end machine learning project for diabetes prediction — inclu
 * [How to contribute](#how-to-contribute)
 * [Testing](#testing)
 * [Roadmap / Improvements](#roadmap--improvements)
-* [License](#license)
 * [Contact](#contact)
 
 ---
@@ -249,99 +248,144 @@ This project includes a **complete CI/CD pipeline** using **GitHub Actions**, Do
 
 ### 🔄 Continuous Integration (CI)
 
-The `ci_cd.yml` workflow performs the following steps:
+Your repository uses a **single unified workflow (`ci_cd.yml`)** that handles model training, evaluation, backend Flask API packaging, and frontend Docker builds.
+
+Here is the accurate CI flow based on your repo structure:
 
 #### **1. Checkout & Setup**
 
-* Pulls latest code from the repository
-* Sets up Python environment for backend testing
-* Installs backend dependencies from `backend/requirements.txt`
-
-#### **2. Build ML Model Artifact**
-
-* Executes your training process to generate:
-
-  * `diabetes_model.pkl`
-  * `diabetes_model.joblib`
-* These artifacts are created **during workflow execution**, ensuring the deployed version always contains a fresh, validated model.
-
-#### **3. Docker Image Build (Backend)**
-
-Using the backend `Dockerfile`:
+* Pulls the repository
+* Sets up Python for backend
+* Installs backend dependencies from:
 
 ```
-/backend/Dockerfile
+backend/requirements.txt
 ```
 
-* Builds the backend service image
-* Copies model artifacts into the Docker container
-* Runs tests **inside Docker** to match Render's production environment
+#### **2. Train the Model — using `train.py`**
 
-Tests executed:
-
-* Import and load the trained model
-* Verify prediction output
-* Run the backend API test script:
-
-  * `test_backend.py`
-
-#### **4. Frontend Build (React/Vite)**
-
-Located in `/frontend`:
-
-* Installs Node dependencies
-* Builds optimized frontend in production mode
-* Builds a Docker image using:
+Your CI pipeline executes:
 
 ```
-/frontend/Dockerfile
+python backend/train.py
 ```
+
+This script performs:
+
+* **Data loading** from your dataset inside backend
+* **Model training** (Logistic Regression / RF / etc.)
+* **Model evaluation** (accuracy, metrics printed inside workflow)
+* **Saving the trained artifacts**, such as:
+
+```
+backend/diabetes_model.pkl
+backend/diabetes_model.joblib
+```
+
+These artifacts are used directly when building the backend Docker container.
+
+#### **3. Backend (Flask API) Docker Build**
+
+Your backend uses **Flask**, located at:
+
+```
+backend/main.py   → Flask API entrypoint
+backend/Dockerfile
+```
+
+CI performs:
+
+* Build backend Docker image
+* Copy trained model (`.pkl` / `.joblib`) into the container
+* Run backend tests via:
+
+```
+backend/test_backend.py
+```
+
+Inside Docker, the workflow verifies:
+
+* Flask API starts successfully
+* Model loads without errors
+* Prediction endpoint returns valid output
+
+This ensures the same behavior Render will use in production.
+
+#### **4. Frontend Docker Build**
+
+Your frontend folder:
+
+```
+frontend/
+frontend/Dockerfile
+```
+
+CI performs:
+
+* Install Node dependencies
+* Build production bundle
+* Create frontend Docker image
+* Optional preview test
+
+The frontend bundle will later be deployed through Render.
+
+---
 
 ### 🚀 Continuous Deployment (CD)
 
-After CI passes successfully:
+Your deployment process is **fully automated** using GitHub Actions + Render API.
+Render deployment happens **immediately after CI passes**, and it uses:
 
-#### **Automatic Deployment to Render**
+* **Render Service ID** (stored securely in GitHub Secrets)
+* **Render API Key** (stored as `RENDER_API_KEY`)
+* **GitHub Actions workflow (`ci_cd.yml`)** to trigger deployments
 
-* GitHub Actions uses your **Render Service ID** to trigger deployment via Render API
-* Pushes the newly built Docker image
-* Render rebuilds and redeploys the service automatically
-* Ensures fully automated backend + frontend rollout
+#### **CD Workflow Steps**
 
-### 📦 Model Artifact Workflow
+Once CI completes successfully:
 
-During CI:
+1. GitHub Actions prepares a deployment request for Render
+2. It reads the following secrets:
 
-1. Model is trained
-2. Artifact files are generated
-3. They are injected into the Docker build context
-4. Docker image includes the **exact model used in tests**
-5. The tested Docker image is the one Render deploys
+   * `RENDER_API_KEY` → Authenticates GitHub → Render API
+   * `RENDER_SERVICE_ID` → Specifies **which Render service** to deploy
+3. The workflow sends a `POST` request to the Render Deploy API:
 
-This prevents:
+```
+https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys
+```
 
-* Model mismatch errors
-* Untrained models in production
-* Environment inconsistency
+4. Render pulls the exact Docker image created in CI
+5. Backend Flask API + model artifact + frontend build are deployed automatically
+6. Render restarts the service with the new version
 
-### 🛠 Docker-Based Workflow Summary
+#### **What Makes This CD Pipeline Strong**
 
-Backend Dockerfile handles:
+* **Zero manual deployment** — everything is triggered by pushes to main branch
+* **Secure** — API key & service ID are never exposed in repo
+* **Consistent** — Render deploys the same tested Docker image from CI
+* **Atomic releases** — backend Flask API + model + frontend update together
 
-* Python environment setup
-* Copying model artifact
-* Launching FastAPI/Flask server
+#### **Secrets Required in GitHub**
 
-Frontend Dockerfile handles:
+Under **Repository → Settings → Secrets and variables → Actions**:
 
-* Build static files
-* Serve via lightweight container (Nginx/Node)
+* `RENDER_API_KEY`
+* `RENDER_SERVICE_ID`
 
-The CI/CD pipeline ensures:
+These are used directly inside the deployment step of `ci_cd.yml`.
 
-* **Same environment** for testing and deployment
-* **Automatic rebuilds** on every push
-* **Zero manual deployment steps**
+#### **End-to-End Flow**
+
+1. Code pushed → CI starts
+2. `train.py` trains & evaluates model
+3. Model artifact generated
+4. Backend Flask API Docker image built + tested
+5. Frontend Docker image built
+6. Render deployment triggered via Render API + Service ID
+7. Production updated automatically
+
+This ensures the latest code + latest validated model are always deployed.
 
 ---
 
@@ -354,12 +398,6 @@ The CI/CD pipeline ensures:
 
 ---
 
-
-
 ## Contact
 
 niransonc@karunya.edu.in
-
----
-
-*Generated by ChatGPT — polished README template for the Diabetes_Ml repository.*
